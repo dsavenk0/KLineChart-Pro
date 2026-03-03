@@ -3,3 +3,5 @@
 /website
 /docs/.vitepress/cache
 .env
+# Vite temp files
+vite.config.ts.timestamp-*
