@@ -1,0 +1,5 @@
+/node_modules
+/dist
+/website
+/docs/.vitepress/cache
+.env

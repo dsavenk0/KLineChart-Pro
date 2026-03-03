@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KLineChart Pro Debug</title>
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #151517;
+    }
+
+    #chart-container {
+      width: 100%;
+      height: 100%;
+    }
+
+    .tools {
+      position: absolute;
+      top: 4px;
+      right: 10px;
+      z-index: 100;
+      display: flex;
+      gap: 10px;
+    }
+
+    .theme-switch {
+      position: relative;
+      display: inline-block;
+      width: 54px;
+      height: 28px;
+    }
+
+    .theme-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #212529;
+      border: 1px solid #343a40;
+      border-radius: 28px;
+      transition: .3s;
+    }
+
+    .slider::before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 2px;
+      bottom: 2px;
+      background-color: #fff;
+      border-radius: 50%;
+      transition: .3s;
+      z-index: 2;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    input:checked+.slider {
+      background-color: #f8f9fa;
+      border-color: #ced4da;
+    }
+
+    input:checked+.slider::before {
+      transform: translateX(26px);
+      background-color: #212529;
+    }
+
+    .theme-icon {
+      position: absolute;
+      top: 4px;
+      font-size: 14px;
+      z-index: 1;
+      user-select: none;
+    }
+
+    .theme-icon.moon {
+      left: 6px;
+    }
+
+    .theme-icon.sun {
+      right: 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="tools">
+    <label class="theme-switch" title="Switch Theme">
+      <input type="checkbox" id="theme-toggle">
+      <span class="slider">
+        <span class="theme-icon moon">🌙</span>
+        <span class="theme-icon sun">☀️</span>
+      </span>
+    </label>
+  </div>
+  <div id="chart-container"></div>
+  <script type="module" src="./main.ts"></script>
+</body>
+
+</html>
