@@ -33,6 +33,24 @@ A professional financial charting platform built on top of **KLineChart Pro**, h
 
 ---
 
+### ↩ Undo / Redo
+
+Full **undo/redo history** covering both drawing overlays and indicators.
+
+| Action | Coverage |
+| ------ | -------- |
+| Draw overlay | Each completed drawing is one undo step |
+| Remove all drawings | Restores all with their original positions |
+| Add / remove indicator | Via modal or tooltip close button |
+
+- **`← Undo`** and **`→ Redo`** buttons in the top toolbar (after Full Screen)
+- **Keyboard shortcuts**: `Ctrl+Z` = Undo · `Ctrl+Y` / `Ctrl+Shift+Z` = Redo
+- Buttons are greyed out when their stack is empty
+- Redo stack is correctly cleared when a new action is performed
+- Full overlay geometry (point coordinates) is captured via `getOverlayById` at draw-end — so redo restores completed drawings, not blank interactive tools
+
+---
+
 ### 📈 Custom Indicators
 
 All indicators use the shared `TA.ts` math library for precision-matched calculations.
