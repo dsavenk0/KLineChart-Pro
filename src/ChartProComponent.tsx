@@ -33,7 +33,7 @@ import {
 import { translateTimezone } from './widget/timezone-modal/data'
 
 import { SymbolInfo, Period, ChartProOptions, ChartPro } from './types'
-import ChartStateManager, { ChartState } from './extension/ChartStateManager'
+import ChartLayoutManager, { ChartState } from './extension/ChartLayoutManager'
 
 export interface ChartProComponentProps extends Required<Omit<ChartProOptions, 'container' | 'onStateChange'>> {
   onStateChange?: (state: any) => void
@@ -239,8 +239,8 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     }
     autoSaveTimer = window.setTimeout(() => {
       if (widget) {
-        const currentState = ChartStateManager.saveState(widget, symbol(), period(), overlays())
-        if (!ChartStateManager.isSameState(currentState, lastSavedState)) {
+        const currentState = ChartLayoutManager.saveState(widget, symbol(), period(), overlays())
+        if (!ChartLayoutManager.isSameState(currentState, lastSavedState)) {
           lastSavedState = currentState
           props.onStateChange?.(currentState)
         }
@@ -262,7 +262,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     setPeriod,
     getPeriod: () => period(),
     saveState: () => {
-      const state = ChartStateManager.saveState(widget!, symbol(), period(), overlays())
+      const state = ChartLayoutManager.saveState(widget!, symbol(), period(), overlays())
       lastSavedState = state
       return state
     },
@@ -270,7 +270,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       if (state) {
         if (state.meta?.symbol) setSymbol(state.meta.symbol)
         if (state.meta?.period) setPeriod(state.meta.period)
-        const restoredDrawings = ChartStateManager.restoreState(widget!, state, (params: any) => {
+        const restoredDrawings = ChartLayoutManager.restoreState(widget!, state, (params: any) => {
           setOverlays(prev => prev.filter(o => o.id !== params.overlay.id))
           return true
         })
@@ -789,7 +789,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             if (state) {
               if (state.meta?.symbol) setSymbol(state.meta.symbol)
               if (state.meta?.period) setPeriod(state.meta.period)
-              const restoredDrawings = ChartStateManager.restoreState(widget!, state, (params: any) => {
+              const restoredDrawings = ChartLayoutManager.restoreState(widget!, state, (params: any) => {
                 setOverlays(prev => prev.filter(o => o.id !== params.overlay.id))
                 return true
               })
