@@ -87,12 +87,97 @@ All indicators use the shared `TA.ts` math library for precision-matched calcula
 
 ---
 
-### 🎨 Script Editor
+### 🎨 Script Indicator Editor JS
 
-- Monaco-powered JS editor for custom indicators.
-- Sandboxed execution via Web Worker — global APIs are shadowed for safety.
-- Access to `TA`, `dataList`, and `params` inside scripts.
-- **Import / Export** buttons to save/load scripts as `.js` or `.txt` files.
+A built-in **Pine Script–style JavaScript editor** for creating fully custom indicators directly inside the platform — no build step, no plugins.
+
+#### How it works
+
+1. Open via the **`Script`** button in the top toolbar.
+2. Write a JS function body in the textarea — the code runs on every candle array.
+3. Click **▶ Run** (or press `Ctrl+Enter`) — the script executes in an isolated Web Worker sandbox and the result appears on the chart immediately.
+4. Adjust parameters and re-run — only the result pane updates, your code stays intact.
+
+#### Script contract
+
+Your script receives three injected variables and must `return` an array:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `dataList` | `KLineData[]` | Full candle history — `{ open, high, low, close, volume, timestamp }` |
+| `params` | `number[]` | Comma-separated numbers from the **Params** input (e.g. `14, 26, 9`) |
+| `TA` | `object` | Built-in technical analysis library (see below) |
+
+**Return value**: an array with one object per candle. Each key becomes a colored line on the chart:
+
+```js
+// Each key → one series line
+return dataList.map((d, i) => ({
+  myLine: someValue[i],
+  signal: anotherValue[i]
+}))
+```
+
+#### Available `TA` functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `TA.ema` | `(values, period)` | Exponential Moving Average |
+| `TA.sma` | `(values, period)` | Simple Moving Average |
+| `TA.rma` | `(values, period)` | Smoothed / RMA (Wilder's MA) |
+| `TA.wma` | `(values, period)` | Weighted Moving Average |
+| `TA.rsi` | `(values, period)` | Relative Strength Index |
+| `TA.macd` | `(values, fast, slow, signal)` | Returns `{ macd, signal, histogram }` arrays |
+| `TA.bollinger` | `(values, period, multiplier)` | Returns `{ upper, mid, lower }` arrays |
+| `TA.atr` | `(highs, lows, closes, period)` | Average True Range |
+| `TA.stoch` | `(highs, lows, closes, kPeriod, dPeriod, smooth)` | Returns `{ k, d }` |
+| `TA.hma` | `(values, period)` | Hull Moving Average |
+| `TA.tr` | `(highs, lows, closes)` | True Range array |
+| `TA.stddev` | `(values, period)` | Standard Deviation |
+
+#### Full working example
+
+```js
+// Dual EMA Cross with RSI confirmation
+const period  = params[0] ?? 14
+const fast    = params[1] ?? 9
+const closes  = dataList.map(d => d.close)
+
+const emaFast = TA.ema(closes, fast)
+const emaSlow = TA.ema(closes, period)
+const rsi     = TA.rsi(closes, period)
+
+return closes.map((_, i) => ({
+  ema_fast: emaFast[i],
+  ema_slow: emaSlow[i],
+  rsi:      rsi[i]
+}))
+```
+
+#### UI controls
+
+| Control | Description |
+|---------|-------------|
+| **Name** | Display name for the indicator in the chart pane header |
+| **Params** | Comma-separated numbers accessible as `params[0]`, `params[1]`, … |
+| **Placement** | `Sub Indicator` (own pane below) or `Main Indicator` (overlaid on candles) |
+| **▶ Run** / `Ctrl+Enter` | Execute the script and apply it to the chart |
+| **Remove** | Remove the current script indicator from the chart |
+| **📂 Import** | Load a `.js`, `.ts`, or `.txt` file into the editor (filename auto-fills Name) |
+| **💾 Export** | Download the current script as a `.js` file |
+| **Reset** | Restore the built-in example template |
+| **Tab** | Inserts 2-space indent (does not leave the editor) |
+
+#### Sandbox security
+
+Scripts run inside a **Web Worker** with the following globals deliberately shadowed to `undefined`:  
+`fetch` · `XMLHttpRequest` · `WebSocket` · `Worker` · `SharedWorker` · `importScripts` · `self` · `caches` · `indexedDB`
+
+This prevents the script from making network requests, spawning sub-workers, or accessing storage — safe to run arbitrary user code.
+
+#### Persistence
+
+Custom script indicators are serialized into the layout via `extendData.isCustomScript` — the code and params are saved with the layout and fully restored when a layout is loaded.
 
 ---
 
