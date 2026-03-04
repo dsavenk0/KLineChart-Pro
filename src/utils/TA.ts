@@ -132,7 +132,7 @@ const TA = {
     macd: (data: number[], fastPeriod: number, slowPeriod: number, signalPeriod: number) => {
         const fastEma = TA.ema(data, fastPeriod)
         const slowEma = TA.ema(data, slowPeriod)
-        const dif = fastEma.map((f, i) => (f !== null && slowEma[i] !== null ? f - slowEma[i] : null))
+        const dif = fastEma.map((f, i) => (f !== null && slowEma[i] !== null ? f - (slowEma[i] as number) : null))
         const dea = TA.ema(dif.filter(v => v !== null) as number[], signalPeriod)
 
         let deaIdx = 0

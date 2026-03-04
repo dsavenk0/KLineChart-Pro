@@ -12,9 +12,9 @@
  * limitations under the License.
  */
 
-import { Indicator, KLineData } from 'klinecharts'
+import { IndicatorTemplate, KLineData } from 'klinecharts'
 
-const pivotPoints: Indicator = {
+const pivotPoints: IndicatorTemplate = {
     name: 'PivotPoints',
     shortName: 'Pivot',
     calcParams: [],
@@ -26,7 +26,7 @@ const pivotPoints: Indicator = {
         { key: 's2', title: 'S2: ', type: 'line' }
     ],
     calc: (dataList: KLineData[]) => {
-        let lastP = null, lastR1 = null, lastS1 = null, lastR2 = null, lastS2 = null
+        let lastP: number | null = null, lastR1: number | null = null, lastS1: number | null = null, lastR2: number | null = null, lastS2: number | null = null
         let lastDate = ''
         let dayHigh = -Infinity, dayLow = Infinity, dayClose = 0
 

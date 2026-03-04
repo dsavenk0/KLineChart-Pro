@@ -863,7 +863,6 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             }}
             onCursorClick={() => {
               cancelPending()
-              widget?.removeOverlay()
             }} />
         </Show>
         <div

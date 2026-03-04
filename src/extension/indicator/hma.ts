@@ -33,7 +33,7 @@ const hma: any = {
 
         const diff = wma1.map((v, i) => {
             if (v !== null && wma2[i] !== null) {
-                return 2 * v - wma2[i]
+                return 2 * v - (wma2[i] as number)
             }
             return null
         })

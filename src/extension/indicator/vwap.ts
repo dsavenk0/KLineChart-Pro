@@ -12,9 +12,9 @@
  * limitations under the License.
  */
 
-import { Indicator, KLineData } from 'klinecharts'
+import { IndicatorTemplate, KLineData } from 'klinecharts'
 
-const vwap: Indicator = {
+const vwap: IndicatorTemplate = {
     name: 'VWAP',
     shortName: 'VWAP',
     calcParams: [],
@@ -33,8 +33,8 @@ const vwap: Indicator = {
                 lastDate = date
             }
             const price = (kLineData.high + kLineData.low + kLineData.close) / 3
-            cumulativeVolume += kLineData.volume
-            cumulativePriceVolume += price * kLineData.volume
+            cumulativeVolume += (kLineData.volume ?? 0)
+            cumulativePriceVolume += price * (kLineData.volume ?? 0)
             return {
                 vwap: cumulativePriceVolume / (cumulativeVolume || 1)
             }
