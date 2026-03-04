@@ -45,7 +45,6 @@ const ALL_SUB_INDICATORS = [
   'CR', 'PSY', 'DMA', 'TRIX', 'OBV',
   'VR', 'WR', 'MTM', 'EMV', 'SAR',
   'SMA', 'ROC', 'PVT', 'BBI', 'AO',
-  'VWAP', 'SuperTrend', 'HMA', 'PivotPoints', 'Ichimoku',
   'RSI_TV', 'MACD_TV', 'CCI', 'Stochastic'
 ];
 
