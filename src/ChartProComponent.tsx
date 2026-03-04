@@ -82,6 +82,128 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
   const [symbol, setSymbol] = createSignal(props.symbol)
   const [period, setPeriod] = createSignal(props.period)
+  // ─── Action-based Undo / Redo ────────────────────────────────────────────
+  // Each entry describes a single reversible action. Overlays store the full
+  // Overlay object (with points) captured via getOverlayById after drawing,
+  // so redo can recreate completed drawings — not blank interactive overlays.
+  type HistoryAction =
+    | { type: 'overlay_added'; overlay: any }
+    | { type: 'overlays_removed'; saved: any[] }
+    | { type: 'indicator_toggled'; name: string; isMain: boolean; paneId: string; added: boolean }
+
+  const [undoStack, setUndoStack] = createSignal<HistoryAction[]>([])
+  const [redoStack, setRedoStack] = createSignal<HistoryAction[]>([])
+
+  /** Track the ID of the pending (not-yet-drawn) retrigger overlay. */
+  let pendingOverlayId: string | null = null
+
+  /** Push a new action onto the undo stack and clear redo. */
+  const pushUndoAction = (action: HistoryAction) => {
+    setUndoStack(prev => [...prev, action])
+    setRedoStack([])
+  }
+
+  /** Cancel any outstanding pending (not yet drawn) overlay before undo/redo. */
+  const cancelPending = () => {
+    if (pendingOverlayId) {
+      widget?.removeOverlay({ id: pendingOverlayId })
+      setOverlays(prev => prev.filter(o => (o as any).id !== pendingOverlayId))
+      pendingOverlayId = null
+    }
+  }
+
+  /** Apply an action forward (redo direction) or reverse it (undo direction). */
+  const applyAction = (action: HistoryAction, dir: 'undo' | 'redo') => {
+    if (action.type === 'overlay_added') {
+      if (dir === 'undo') {
+        widget?.removeOverlay({ id: action.overlay.id })
+        setOverlays(prev => prev.filter(o => (o as any).id !== action.overlay.id))
+      } else {
+        // Recreate with full overlay data (including points) — renders as completed drawing
+        const restored = { ...action.overlay }
+        delete restored.onDrawEnd
+        delete restored.onRemoved
+        widget?.createOverlay({
+          ...restored,
+          onRemoved: (params: any) => {
+            setOverlays(prev => prev.filter(o => (o as any).id !== params.overlay.id))
+            return true
+          }
+        } as any)
+        setOverlays(prev => [...prev, { name: restored.name, id: restored.id, groupId: restored.groupId }])
+      }
+    } else if (action.type === 'overlays_removed') {
+      if (dir === 'undo') {
+        action.saved.forEach((overlay: any) => {
+          const restored = { ...overlay }
+          delete restored.onDrawEnd
+          delete restored.onRemoved
+          widget?.createOverlay({
+            ...restored,
+            onRemoved: (params: any) => {
+              setOverlays(prev => prev.filter(o => (o as any).id !== params.overlay.id))
+              return true
+            }
+          } as any)
+        })
+        setOverlays(action.saved.map((o: any) => ({ name: o.name, id: o.id, groupId: o.groupId })))
+      } else {
+        setOverlays([])
+        widget?.removeOverlay({ groupId: 'drawing_tools' })
+      }
+    } else if (action.type === 'indicator_toggled') {
+      const shouldAdd = dir === 'undo' ? !action.added : action.added
+      if (shouldAdd) {
+        if (action.isMain) {
+          createIndicator(widget, action.name, true, { id: 'candle_pane' })
+          setMainIndicators(prev => [...prev, action.name])
+        } else {
+          const paneId = createIndicator(widget, action.name) ?? action.paneId
+          setSubIndicators((prev: any) => ({ ...prev, [action.name]: paneId }))
+        }
+      } else {
+        if (action.isMain) {
+          widget?.removeIndicator('candle_pane', action.name)
+          setMainIndicators(prev => prev.filter(n => n !== action.name))
+        } else {
+          widget?.removeIndicator(action.paneId, action.name)
+          setSubIndicators((prev: any) => { const n = { ...prev }; delete n[action.name]; return n })
+        }
+      }
+    }
+    triggerAutoSave()
+  }
+
+  /** Undo the last action. Single click or Ctrl+Z. */
+  const handleUndo = () => {
+    cancelPending()
+    const stack = undoStack()
+    if (stack.length === 0) return
+    const action = stack[stack.length - 1]
+    setUndoStack(prev => prev.slice(0, -1))
+    setRedoStack(prev => [...prev, action])
+    applyAction(action, 'undo')
+  }
+
+  /** Redo the last undone action. Single click or Ctrl+Y. */
+  const handleRedo = () => {
+    cancelPending()
+    const stack = redoStack()
+    if (stack.length === 0) return
+    const action = stack[stack.length - 1]
+    setRedoStack(prev => prev.slice(0, -1))
+    setUndoStack(prev => [...prev, action])
+    applyAction(action, 'redo')
+  }
+
+  /** Keyboard shortcut handler: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo. */
+  const handleKeyDown = (e: KeyboardEvent) => {
+    const ctrl = e.ctrlKey || e.metaKey
+    if (!ctrl) return
+    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo() }
+    if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); handleRedo() }
+  }
+
   const [overlays, setOverlays] = createSignal<OverlayCreate[]>([])
   const [indicatorModalVisible, setIndicatorModalVisible] = createSignal(false)
   const [mainIndicators, setMainIndicators] = createSignal([...(props.mainIndicators!)])
@@ -216,6 +338,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
   onMount(() => {
     window.addEventListener('resize', documentResize)
+    window.addEventListener('keydown', handleKeyDown)
     console.log('ChartProComponent onMount, widgetRef:', widgetRef)
     if (!widgetRef) {
       console.error('ChartProComponent onMount: widgetRef is MISSING!')
@@ -324,7 +447,15 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             break
           }
           case 'close': {
-            if (data.paneId === 'candle_pane') {
+            const isMain = data.paneId === 'candle_pane'
+            pushUndoAction({
+              type: 'indicator_toggled',
+              name: data.indicatorName,
+              isMain,
+              paneId: data.paneId,
+              added: false
+            })
+            if (isMain) {
               const newMainIndicators = [...mainIndicators()]
               widget?.removeIndicator('candle_pane', data.indicatorName)
               newMainIndicators.splice(newMainIndicators.indexOf(data.indicatorName), 1)
@@ -345,6 +476,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
   onCleanup(() => {
     window.removeEventListener('resize', documentResize)
+    window.removeEventListener('keydown', handleKeyDown)
     dispose(widgetRef!)
   })
 
@@ -525,6 +657,13 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           subIndicators={subIndicators()}
           onClose={() => { setIndicatorModalVisible(false) }}
           onMainIndicatorChange={data => {
+            pushUndoAction({
+              type: 'indicator_toggled',
+              name: data.name,
+              isMain: true,
+              paneId: 'candle_pane',
+              added: data.added
+            })
             const newMainIndicators = [...mainIndicators()]
             if (data.added) {
               createIndicator(widget, data.name, true, { id: 'candle_pane' })
@@ -537,6 +676,14 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             triggerAutoSave()
           }}
           onSubIndicatorChange={data => {
+            const paneIdForUndo = data.paneId ?? ''
+            pushUndoAction({
+              type: 'indicator_toggled',
+              name: data.name,
+              isMain: false,
+              paneId: paneIdForUndo,
+              added: data.added
+            })
             const newSubIndicators = { ...subIndicators() }
             if (data.added) {
               const paneId = createIndicator(widget, data.name)
@@ -626,6 +773,10 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         }}
         onSaveLoadClick={() => setSaveLoadModalVisible(v => !v)}
         onScriptEditorClick={() => setScriptEditorVisible(v => !v)}
+        canUndo={undoStack().length > 0}
+        canRedo={redoStack().length > 0}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
       />
       <Show when={saveLoadModalVisible()}>
         <SaveLoadMenu
@@ -664,35 +815,54 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           <DrawingBar
             locale={props.locale}
             onDrawingItemClick={overlay => {
-              // Wrap overlay creation so that onDrawEnd auto-retriggers the same tool.
-              // Brush is excluded because DrawingBar.activateBrush already handles its own retrigger.
               const createWithRetrigger = (oc: OverlayCreate) => {
+                const originalOnDrawEnd = (oc as any).onDrawEnd
                 const id = widget?.createOverlay({
                   ...oc,
                   onRemoved: (params: any) => {
-                    setOverlays(prev => prev.filter(o => o.id !== params.overlay.id))
+                    if (pendingOverlayId === params.overlay.id) pendingOverlayId = null
+                    setOverlays(prev => prev.filter(o => (o as any).id !== params.overlay.id))
                     return true
                   },
-                  // Preserve existing onDrawEnd (e.g. from brush), or add retrigger for other tools
-                  onDrawEnd: (oc as any).onDrawEnd ?? (() => {
-                    createWithRetrigger(oc)
-                  })
+                  onDrawEnd: (event: any) => {
+                    const finishedId = id as string
+                    // Capture the FULL overlay (with points) for reliable redo reconstruction
+                    const fullOverlay = finishedId ? widget?.getOverlayById(finishedId) : null
+                    if (fullOverlay) {
+                      pushUndoAction({ type: 'overlay_added', overlay: fullOverlay })
+                    }
+                    pendingOverlayId = null
+                    // Brush uses its own retrigger; other tools auto-retrigger
+                    if (originalOnDrawEnd) {
+                      originalOnDrawEnd(event)
+                    } else {
+                      createWithRetrigger(oc)
+                    }
+                  }
                 } as any)
                 if (utils.isString(id)) {
-                  setOverlays([...overlays(), { ...oc, id: id as string }])
+                  pendingOverlayId = id as string
+                  setOverlays(prev => [...prev, { ...oc, id: id as string }])
                 }
               }
+              cancelPending()
               createWithRetrigger(overlay)
             }}
             onModeChange={mode => { widget?.overrideOverlay({ mode: mode as OverlayMode }) }}
             onLockChange={lock => { widget?.overrideOverlay({ lock }) }}
             onVisibleChange={visible => { widget?.overrideOverlay({ visible }) }}
             onRemoveClick={(groupId) => {
+              cancelPending()
+              // Save full overlay data for all current overlays before removing
+              const savedOverlays = overlays()
+                .map(o => widget?.getOverlayById((o as any).id))
+                .filter(Boolean)
+              pushUndoAction({ type: 'overlays_removed', saved: savedOverlays })
               setOverlays([])
               widget?.removeOverlay({ groupId })
             }}
             onCursorClick={() => {
-              // Cancel any in-progress drawing, return to pan/navigate mode
+              cancelPending()
               widget?.removeOverlay()
             }} />
         </Show>

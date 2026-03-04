@@ -146,5 +146,7 @@
   "show_drawings": "Show Drawings",
   "remove_drawings": "Remove All Drawings",
   "cursor_tool": "Cursor (Navigate)",
-  "ma_ribbon": "MA Ribbon"
+  "ma_ribbon": "MA Ribbon",
+  "undo": "Undo",
+  "redo": "Redo"
 }

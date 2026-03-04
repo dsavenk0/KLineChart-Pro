@@ -145,5 +145,8 @@
   "hide_drawings": "隐藏绘图",
   "show_drawings": "显示绘图",
   "remove_drawings": "删除所有绘图",
-  "ma_ribbon": "MA Ribbon"
+  "cursor_tool": "光标（导航）",
+  "ma_ribbon": "MA Ribbon",
+  "undo": "撤销",
+  "redo": "重做"
 }

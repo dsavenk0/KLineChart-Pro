@@ -33,6 +33,10 @@ export interface PeriodBarProps {
   onScreenshotClick: () => void
   onSaveLoadClick: () => void
   onScriptEditorClick?: () => void
+  onUndo: () => void
+  onRedo: () => void
+  canUndo: boolean
+  canRedo: boolean
 }
 
 const PeriodBar: Component<PeriodBarProps> = props => {
@@ -177,6 +181,28 @@ const PeriodBar: Component<PeriodBarProps> = props => {
             </>
           )
         }
+      </div>
+      {/* Undo */}
+      <div
+        class='period-bar-item period-bar-tools'
+        title={i18n('undo', props.locale)}
+        style={props.canUndo ? {} : { opacity: '0.35', 'pointer-events': 'none' }}
+        onClick={() => { if (props.canUndo) props.onUndo() }}>
+        <svg viewBox="0 0 20 20">
+          <path fill="currentColor" d="M10 4H5.83L7.41 2.41 6 1 2 5l4 4 1.41-1.41L5.83 6H10c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4H4c0 3.31 2.69 6 6 6s6-2.69 6-6-2.69-6-6-6z" />
+        </svg>
+        <span>{i18n('undo', props.locale)}</span>
+      </div>
+      {/* Redo */}
+      <div
+        class='period-bar-item period-bar-tools'
+        title={i18n('redo', props.locale)}
+        style={props.canRedo ? {} : { opacity: '0.35', 'pointer-events': 'none' }}
+        onClick={() => { if (props.canRedo) props.onRedo() }}>
+        <svg viewBox="0 0 20 20">
+          <path fill="currentColor" d="M10 4h4.17l-1.58-1.59L14 1l4 4-4 4-1.41-1.41L14.17 6H10C7.79 6 6 7.79 6 10s1.79 4 4 4 4-1.79 4-4h2c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6z" />
+        </svg>
+        <span>{i18n('redo', props.locale)}</span>
       </div>
     </div>
   )
