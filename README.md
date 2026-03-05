@@ -103,7 +103,7 @@ A built-in **Pine Script–style JavaScript editor** for creating fully custom i
 Your script receives three injected variables and must `return` an array:
 
 | Variable | Type | Description |
-|----------|------|-------------|
+| -------- | ---- | ----------- |
 | `dataList` | `KLineData[]` | Full candle history — `{ open, high, low, close, volume, timestamp }` |
 | `params` | `number[]` | Comma-separated numbers from the **Params** input (e.g. `14, 26, 9`) |
 | `TA` | `object` | Built-in technical analysis library (see below) |
@@ -121,7 +121,7 @@ return dataList.map((d, i) => ({
 #### Available `TA` functions
 
 | Function | Signature | Description |
-|----------|-----------|-------------|
+| -------- | --------- | ----------- |
 | `TA.ema` | `(values, period)` | Exponential Moving Average |
 | `TA.sma` | `(values, period)` | Simple Moving Average |
 | `TA.rma` | `(values, period)` | Smoothed / RMA (Wilder's MA) |
@@ -157,7 +157,7 @@ return closes.map((_, i) => ({
 #### UI controls
 
 | Control | Description |
-|---------|-------------|
+| ------- | ----------- |
 | **Name** | Display name for the indicator in the chart pane header |
 | **Params** | Comma-separated numbers accessible as `params[0]`, `params[1]`, … |
 | **Placement** | `Sub Indicator` (own pane below) or `Main Indicator` (overlaid on candles) |
