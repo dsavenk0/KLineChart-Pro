@@ -208,7 +208,23 @@ export default class ChartLayoutManager {
                                 return { key, title: `${key}: `, type: 'line', styles: () => ({ color: COLORS[i % COLORS.length] }) }
                             }) as any,
                             calc: () => result,
-                            extendData: indicator.extendData
+                            extendData: indicator.extendData,
+                            createTooltipDataSource: ({ indicator: ind, defaultStyles }: any) => {
+                                const icons = []
+                                const isSub = indicator.extendData?.placement !== 'main'
+                                if (ind.visible) {
+                                    icons.push(defaultStyles.tooltip.icons[1])
+                                    icons.push(defaultStyles.tooltip.icons[3])
+                                } else {
+                                    icons.push(defaultStyles.tooltip.icons[0])
+                                    icons.push(defaultStyles.tooltip.icons[3])
+                                }
+                                if (isSub) {
+                                    icons.push(defaultStyles.tooltip.icons[4])
+                                    icons.push(defaultStyles.tooltip.icons[5])
+                                }
+                                return { icons } as any
+                            }
                         })
                     } catch (e) {
                         console.error('Failed to restore custom script indicator', e)

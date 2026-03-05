@@ -54,6 +54,7 @@ function createIndicator(widget: Nullable<Chart>, indicatorName: string, isStack
     // @ts-expect-error
     createTooltipDataSource: ({ indicator, defaultStyles }) => {
       const icons = []
+      const isSub = paneOptions?.id !== 'candle_pane'
       if (indicator.visible) {
         icons.push(defaultStyles.tooltip.icons[1])
         icons.push(defaultStyles.tooltip.icons[2])
@@ -62,6 +63,10 @@ function createIndicator(widget: Nullable<Chart>, indicatorName: string, isStack
         icons.push(defaultStyles.tooltip.icons[0])
         icons.push(defaultStyles.tooltip.icons[2])
         icons.push(defaultStyles.tooltip.icons[3])
+      }
+      if (isSub) {
+        icons.push(defaultStyles.tooltip.icons[4])
+        icons.push(defaultStyles.tooltip.icons[5])
       }
       return { icons }
     }
@@ -208,6 +213,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   const [indicatorModalVisible, setIndicatorModalVisible] = createSignal(false)
   const [mainIndicators, setMainIndicators] = createSignal([...(props.mainIndicators!)])
   const [subIndicators, setSubIndicators] = createSignal({})
+  const [paneHeights, setPaneHeights] = createSignal<Record<string, number>>({})
 
   const [timezoneModalVisible, setTimezoneModalVisible] = createSignal(false)
   const [timezone, setTimezone] = createSignal<SelectDataSourceItem>({ key: props.timezone, text: translateTimezone(props.timezone, props.locale) })
@@ -430,13 +436,51 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       if (data.indicatorName) {
         switch (data.iconId) {
           case 'visible': {
+            const height = paneHeights()[data.paneId] || 100
+            widget?.setPaneOptions({ id: data.paneId, height })
             widget?.overrideIndicator({ name: data.indicatorName, visible: true }, data.paneId)
             triggerAutoSave()
             break
           }
           case 'invisible': {
+            if (data.paneId !== 'candle_pane') {
+              const currentPane = widget?.getSize(data.paneId)
+              if (currentPane && currentPane.height) {
+                setPaneHeights({ ...paneHeights(), [data.paneId]: currentPane.height })
+              }
+              widget?.setPaneOptions({ id: data.paneId, height: 30 })
+            }
             widget?.overrideIndicator({ name: data.indicatorName, visible: false }, data.paneId)
             triggerAutoSave()
+            break
+          }
+          case 'up':
+          case 'down': {
+            if (data.paneId !== 'candle_pane' && widget) {
+              const state = ChartLayoutManager.saveState(widget, symbol(), period(), overlays())
+              if (state && state.indicators) {
+                const subInds = state.indicators.filter(ind => ind.paneId !== 'candle_pane')
+                const targetIdx = subInds.findIndex(ind => ind.paneId === data.paneId)
+                if (targetIdx !== -1) {
+                  const swapIdx = data.iconId === 'up' ? targetIdx - 1 : targetIdx + 1
+                  if (swapIdx >= 0 && swapIdx < subInds.length) {
+                    const a = subInds[targetIdx]
+                    const b = subInds[swapIdx]
+                    const aIdx = state.indicators.indexOf(a)
+                    const bIdx = state.indicators.indexOf(b)
+                    state.indicators[aIdx] = b
+                    state.indicators[bIdx] = a
+
+                    const restoredDrawings = ChartLayoutManager.restoreState(widget, state, (params: any) => {
+                      setOverlays(prev => prev.filter(o => o.id !== params.overlay.id))
+                      return true
+                    })
+                    setOverlays(restoredDrawings)
+                    triggerAutoSave()
+                  }
+                }
+              }
+            }
             break
           }
           case 'setting': {
@@ -613,6 +657,44 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
               paddingBottom: 0,
               icon: '\ue900',
               fontFamily: 'icomoon',
+              size: 14,
+              color: color,
+              activeColor: color,
+              backgroundColor: 'transparent',
+              activeBackgroundColor: 'rgba(22, 119, 255, 0.15)'
+            },
+            {
+              id: 'up',
+              position: TooltipIconPosition.Middle,
+              marginLeft: 6,
+              marginTop: 7,
+              marginRight: 0,
+              marginBottom: 0,
+              paddingLeft: 0,
+              paddingTop: 0,
+              paddingRight: 0,
+              paddingBottom: 0,
+              icon: '\u2191',
+              fontFamily: 'sans-serif',
+              size: 14,
+              color: color,
+              activeColor: color,
+              backgroundColor: 'transparent',
+              activeBackgroundColor: 'rgba(22, 119, 255, 0.15)'
+            },
+            {
+              id: 'down',
+              position: TooltipIconPosition.Middle,
+              marginLeft: 6,
+              marginTop: 7,
+              marginRight: 0,
+              marginBottom: 0,
+              paddingLeft: 0,
+              paddingTop: 0,
+              paddingRight: 0,
+              paddingBottom: 0,
+              icon: '\u2193',
+              fontFamily: 'sans-serif',
               size: 14,
               color: color,
               activeColor: color,

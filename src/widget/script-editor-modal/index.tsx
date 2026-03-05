@@ -132,6 +132,22 @@ const ScriptEditorModal: Component<ScriptEditorModalProps> = props => {
                     isCustomScript: true,
                     code: code(),
                     placement: placement()
+                },
+                createTooltipDataSource: ({ indicator, defaultStyles }: any) => {
+                    const icons = []
+                    const isSub = placement() !== 'main'
+                    if (indicator.visible) {
+                        icons.push(defaultStyles.tooltip.icons[1])
+                        icons.push(defaultStyles.tooltip.icons[3])
+                    } else {
+                        icons.push(defaultStyles.tooltip.icons[0])
+                        icons.push(defaultStyles.tooltip.icons[3])
+                    }
+                    if (isSub) {
+                        icons.push(defaultStyles.tooltip.icons[4])
+                        icons.push(defaultStyles.tooltip.icons[5])
+                    }
+                    return { icons } as any
                 }
             })
 

@@ -34,7 +34,7 @@ const IndicatorSettingModal: Component<IndicatorSettingModalProps> = props => {
 
   const getConfig: (name: string) => any[] = (name: string) => {
     // @ts-expect-error
-    return data[name]
+    return data[name] || []
   }
 
   return (
@@ -50,7 +50,7 @@ const IndicatorSettingModal: Component<IndicatorSettingModalProps> = props => {
             const params: any[] = []
             utils.clone(calcParams()).forEach((param: any, i: number) => {
               if (!utils.isValid(param) || param === '') {
-                if ('default' in config[i]) {
+                if (config[i] && 'default' in config[i]) {
                   params.push(config[i]['default'])
                 }
               } else {
@@ -78,13 +78,13 @@ const IndicatorSettingModal: Component<IndicatorSettingModalProps> = props => {
                     const params = utils.clone(calcParams())
                     params[i] = value
                     setCalcParams(params)
-                  }}/>
+                  }} />
               </>
             )
           })
         }
       </div>
-      
+
     </Modal>
   )
 }

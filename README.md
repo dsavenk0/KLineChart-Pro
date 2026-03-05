@@ -78,6 +78,13 @@ All indicators use the shared `TA.ts` math library for precision-matched calcula
 
 ---
 
+### 📊 Indicator UX
+
+- **Collapsible Panes**: Clicking the "Visibility" (Eye) icon on any sub-indicator instantly collapses its pane to a minimal 30px height instead of just hiding the line, maximizing screen space without losing the indicator's configuration. Clicking it again restores it to its previous height.
+- **Sub-Indicator Reordering**: Each sub-indicator pane features `↑` and `↓` arrows in its tooltip header. Clicking these instantly shifts the pane up or down relative to other sub-indicators, inherently retaining its new placement within the chart layout state.
+
+---
+
 ### 💾 State Management
 
 - **ChartStateManager** — full serialization of indicators, drawings, zoom/scroll, and symbol/period.
