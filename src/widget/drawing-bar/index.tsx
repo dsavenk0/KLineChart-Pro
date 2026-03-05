@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-import { Component, createMemo, createSignal } from 'solid-js'
+import { Component, createMemo, createSignal, onMount, onCleanup } from 'solid-js'
 
 import { OverlayCreate, OverlayMode } from 'klinecharts'
 
@@ -60,6 +60,29 @@ const DrawingBar: Component<DrawingBarProps> = props => {
   const [brushOpacity, setBrushOpacity] = createSignal(1)
   const [brushActive, setBrushActive] = createSignal(false)
   const [cursorActive, setCursorActive] = createSignal(true)
+
+  // Scroll state — tracks whether the bar overflows and needs a scroll arrow
+  const [showScrollDown, setShowScrollDown] = createSignal(false)
+  let barRef: HTMLDivElement | undefined
+  let scrollRef: HTMLDivElement | undefined
+
+  const updateScrollBtn = () => {
+    if (!scrollRef) return
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef
+    setShowScrollDown(scrollHeight - scrollTop - clientHeight > 2)
+  }
+
+  onMount(() => {
+    if (!scrollRef) return
+    updateScrollBtn()
+    const ro = new ResizeObserver(updateScrollBtn)
+    ro.observe(scrollRef)
+    scrollRef.addEventListener('scroll', updateScrollBtn)
+    onCleanup(() => {
+      ro.disconnect()
+      scrollRef?.removeEventListener('scroll', updateScrollBtn)
+    })
+  })
 
   /**
    * Generates a custom SVG cursor for the brush tool. 
@@ -155,299 +178,318 @@ const DrawingBar: Component<DrawingBarProps> = props => {
 
   return (
     <div
-      class="klinecharts-pro-drawing-bar">
-      {/* Cursor / navigate tool — deactivates any drawing and returns to pan mode */}
-      <div class="drawing-bar-item">
-        <span
-          style="width:32px;height:32px"
-          title={i18n('cursor_tool', props.locale)}
-          onClick={() => {
-            setCursorActive(true)
-            setBrushActive(false)
-            setChartCursor('')
-            props.onCursorClick()
-          }}>
-          {cursorActive()
-            ? <Icon name="cursor" class="selected icon-overlay" />
-            : <Icon name="cursor" class="icon-overlay" />
-          }
-        </span>
-      </div>
-      <span class="split-line" />
-      {
-        overlays().map(item => {
-          return (
-            <div
-              class="drawing-bar-item"
-              tabIndex={0}
-              onBlur={() => { setPopoverKey('') }}>
-              <span
-                style="width:32px;height:32px"
-                title={String(item.list.find(d => d.key === item.icon)?.text ?? item.icon)}
-                onClick={() => {
-                  setCursorActive(false)
-                  props.onDrawingItemClick({ groupId: GROUP_ID, name: item.icon, visible: visible(), lock: lock(), mode: mode() as OverlayMode })
-                }}>
-                <Icon name={item.icon} class="icon-overlay" />
-              </span>
-              <div
-                class="icon-arrow"
-                onClick={() => {
-                  if (item.key === popoverKey()) {
-                    setPopoverKey('')
-                  } else {
-                    setPopoverKey(item.key)
-                  }
-                }}>
-                <svg
-                  class={item.key === popoverKey() ? 'rotate' : ''}
-                  viewBox="0 0 4 6">
-                  <path d="M1.07298,0.159458C0.827521,-0.0531526,0.429553,-0.0531526,0.184094,0.159458C-0.0613648,0.372068,-0.0613648,0.716778,0.184094,0.929388L2.61275,3.03303L0.260362,5.07061C0.0149035,5.28322,0.0149035,5.62793,0.260362,5.84054C0.505822,6.05315,0.903789,6.05315,1.14925,5.84054L3.81591,3.53075C4.01812,3.3556,4.05374,3.0908,3.92279,2.88406C3.93219,2.73496,3.87113,2.58315,3.73964,2.46925L1.07298,0.159458Z" stroke="none" stroke-opacity="0" />
-                </svg>
-              </div>
-              {
-                item.key === popoverKey() && (
-                  <List class="list">
-                    {
-                      item.list.map(data => (
-                        <li
-                          onClick={() => {
-                            item.setter(data.key)
-                            setCursorActive(false)
-                            props.onDrawingItemClick({ groupId: GROUP_ID, name: data.key, lock: lock(), mode: mode() as OverlayMode })
-                            setPopoverKey('')
-                            setBrushActive(false)
-                            setChartCursor('')  // reset brush cursor when another tool is selected
-                          }}>
-                          <Icon name={data.key} class="icon-overlay" />
-                          <span style="padding-left:8px">{data.text}</span>
-                        </li>
-                      ))
-                    }
-                  </List>
-                )
-              }
-            </div>
-          )
-        })
-      }
+      class="klinecharts-pro-drawing-bar"
+      ref={barRef}>
+      {/* Scrollable content area */}
       <div
-        class="drawing-bar-item"
-        tabIndex={0}
-        onBlur={(e) => {
-          if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget as Node)) {
-            setPopoverKey('')
-          }
-        }}>
-        <span
-          style="width:32px;height:32px;position:relative;display:flex;align-items:center;justify-content:center"
-          title={i18n('brush', props.locale)}
-          onClick={() => {
-            activateBrush(brushColor(), brushSize(), brushOpacity())
-          }}>
-          <Icon name="brush" class="icon-overlay" />
-          {/* Color dot indicator — shows currently selected brush color */}
-          <span style={{
-            position: 'absolute',
-            bottom: '2px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '10px',
-            height: '3px',
-            'border-radius': '2px',
-            'background-color': brushColor(),
-            'pointer-events': 'none'
-          }} />
-        </span>
+        class="drawing-bar-scroll-area"
+        ref={scrollRef}>
+        {/* Cursor / navigate tool — deactivates any drawing and returns to pan mode */}
+        <div class="drawing-bar-item">
+          <span
+            style="width:32px;height:32px"
+            title={i18n('cursor_tool', props.locale)}
+            onClick={() => {
+              setCursorActive(true)
+              setBrushActive(false)
+              setChartCursor('')
+              props.onCursorClick()
+            }}>
+            {cursorActive()
+              ? <Icon name="cursor" class="selected icon-overlay" />
+              : <Icon name="cursor" class="icon-overlay" />
+            }
+          </span>
+        </div>
+        <span class="split-line" />
+        {
+          overlays().map(item => {
+            return (
+              <div
+                class="drawing-bar-item"
+                tabIndex={0}
+                onBlur={() => { setPopoverKey('') }}>
+                <span
+                  style="width:32px;height:32px"
+                  title={String(item.list.find(d => d.key === item.icon)?.text ?? item.icon)}
+                  onClick={() => {
+                    setCursorActive(false)
+                    props.onDrawingItemClick({ groupId: GROUP_ID, name: item.icon, visible: visible(), lock: lock(), mode: mode() as OverlayMode })
+                  }}>
+                  <Icon name={item.icon} class="icon-overlay" />
+                </span>
+                <div
+                  class="icon-arrow"
+                  onClick={() => {
+                    if (item.key === popoverKey()) {
+                      setPopoverKey('')
+                    } else {
+                      setPopoverKey(item.key)
+                    }
+                  }}>
+                  <svg
+                    class={item.key === popoverKey() ? 'rotate' : ''}
+                    viewBox="0 0 4 6">
+                    <path d="M1.07298,0.159458C0.827521,-0.0531526,0.429553,-0.0531526,0.184094,0.159458C-0.0613648,0.372068,-0.0613648,0.716778,0.184094,0.929388L2.61275,3.03303L0.260362,5.07061C0.0149035,5.28322,0.0149035,5.62793,0.260362,5.84054C0.505822,6.05315,0.903789,6.05315,1.14925,5.84054L3.81591,3.53075C4.01812,3.3556,4.05374,3.0908,3.92279,2.88406C3.93219,2.73496,3.87113,2.58315,3.73964,2.46925L1.07298,0.159458Z" stroke="none" stroke-opacity="0" />
+                  </svg>
+                </div>
+                {
+                  item.key === popoverKey() && (
+                    <List class="list">
+                      {
+                        item.list.map(data => (
+                          <li
+                            onClick={() => {
+                              item.setter(data.key)
+                              setCursorActive(false)
+                              props.onDrawingItemClick({ groupId: GROUP_ID, name: data.key, lock: lock(), mode: mode() as OverlayMode })
+                              setPopoverKey('')
+                              setBrushActive(false)
+                              setChartCursor('')  // reset brush cursor when another tool is selected
+                            }}>
+                            <Icon name={data.key} class="icon-overlay" />
+                            <span style="padding-left:8px">{data.text}</span>
+                          </li>
+                        ))
+                      }
+                    </List>
+                  )
+                }
+              </div>
+            )
+          })
+        }
         <div
-          class="icon-arrow"
-          onClick={() => {
-            if (popoverKey() === 'brush') {
+          class="drawing-bar-item"
+          tabIndex={0}
+          onBlur={(e) => {
+            if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget as Node)) {
               setPopoverKey('')
-            } else {
-              setPopoverKey('brush')
             }
           }}>
-          <svg
-            class={popoverKey() === 'brush' ? 'rotate' : ''}
-            viewBox="0 0 4 6">
-            <path d="M1.07298,0.159458C0.827521,-0.0531526,0.429553,-0.0531526,0.184094,0.159458C-0.0613648,0.372068,-0.0613648,0.716778,0.184094,0.929388L2.61275,3.03303L0.260362,5.07061C0.0149035,5.28322,0.0149035,5.62793,0.260362,5.84054C0.505822,6.05315,0.903789,6.05315,1.14925,5.84054L3.81591,3.53075C4.01812,3.3556,4.05374,3.0908,3.92279,2.88406C3.93219,2.73496,3.87113,2.58315,3.73964,2.46925L1.07298,0.159458Z" stroke="none" stroke-opacity="0" />
-          </svg>
-        </div>
-        {
-          popoverKey() === 'brush' && (
-            <div class="list" style="padding:16px;display:flex;flex-direction:column;gap:12px;width:220px;border-radius:4px;cursor:default">
-              <div style="display:flex;align-items:center;justify-content:space-between">
-                <span style="font-size:14px;color:var(--klinecharts-pro-text-color)">Color</span>
-                <div style="display:flex;align-items:center;gap:6px">
-                  {['#f92855', '#2bca73', '#1677ff', '#ffac00', '#ffffff'].map(c => (
-                    <div
-                      style={{
-                        width: '18px', height: '18px', 'border-radius': '50%',
-                        'background-color': c, cursor: 'pointer',
-                        border: brushColor() === c ? '2px solid var(--klinecharts-pro-primary-color)' : '1px solid var(--klinecharts-pro-border-color)'
-                      }}
-                      onClick={() => {
-                        setBrushColor(c)
-                        activateBrush(c, brushSize(), brushOpacity())
-                      }}
-                    />
-                  ))}
-                  <div style="position:relative;width:18px;height:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--klinecharts-pro-border-color)">
-                    <div style={{
-                      width: '14px',
-                      height: '14px',
-                      'border-radius': '50%',
-                      background: 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
-                    }} />
-                    <input
-                      type="color"
-                      value={brushColor()}
-                      onChange={(e) => {
-                        const val = e.currentTarget.value
-                        setBrushColor(val)
-                        activateBrush(val, brushSize(), brushOpacity())
-                      }}
-                      onInput={(e) => {
-                        const val = e.currentTarget.value
-                        setBrushColor(val)
-                        // Re-activate brush immediately on every color pick so it stays ready
-                        activateBrush(val, brushSize(), brushOpacity())
-                      }}
-                      style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;color-scheme:dark;"
-                    />
+          <span
+            style="width:32px;height:32px;position:relative;display:flex;align-items:center;justify-content:center"
+            title={i18n('brush', props.locale)}
+            onClick={() => {
+              activateBrush(brushColor(), brushSize(), brushOpacity())
+            }}>
+            <Icon name="brush" class="icon-overlay" />
+            {/* Color dot indicator — shows currently selected brush color */}
+            <span style={{
+              position: 'absolute',
+              bottom: '2px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '10px',
+              height: '3px',
+              'border-radius': '2px',
+              'background-color': brushColor(),
+              'pointer-events': 'none'
+            }} />
+          </span>
+          <div
+            class="icon-arrow"
+            onClick={() => {
+              if (popoverKey() === 'brush') {
+                setPopoverKey('')
+              } else {
+                setPopoverKey('brush')
+              }
+            }}>
+            <svg
+              class={popoverKey() === 'brush' ? 'rotate' : ''}
+              viewBox="0 0 4 6">
+              <path d="M1.07298,0.159458C0.827521,-0.0531526,0.429553,-0.0531526,0.184094,0.159458C-0.0613648,0.372068,-0.0613648,0.716778,0.184094,0.929388L2.61275,3.03303L0.260362,5.07061C0.0149035,5.28322,0.0149035,5.62793,0.260362,5.84054C0.505822,6.05315,0.903789,6.05315,1.14925,5.84054L3.81591,3.53075C4.01812,3.3556,4.05374,3.0908,3.92279,2.88406C3.93219,2.73496,3.87113,2.58315,3.73964,2.46925L1.07298,0.159458Z" stroke="none" stroke-opacity="0" />
+            </svg>
+          </div>
+          {
+            popoverKey() === 'brush' && (
+              <div class="list" style="padding:16px;display:flex;flex-direction:column;gap:12px;width:220px;border-radius:4px;cursor:default">
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <span style="font-size:14px;color:var(--klinecharts-pro-text-color)">Color</span>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    {['#f92855', '#2bca73', '#1677ff', '#ffac00', '#ffffff'].map(c => (
+                      <div
+                        style={{
+                          width: '18px', height: '18px', 'border-radius': '50%',
+                          'background-color': c, cursor: 'pointer',
+                          border: brushColor() === c ? '2px solid var(--klinecharts-pro-primary-color)' : '1px solid var(--klinecharts-pro-border-color)'
+                        }}
+                        onClick={() => {
+                          setBrushColor(c)
+                          activateBrush(c, brushSize(), brushOpacity())
+                        }}
+                      />
+                    ))}
+                    <div style="position:relative;width:18px;height:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--klinecharts-pro-border-color)">
+                      <div style={{
+                        width: '14px',
+                        height: '14px',
+                        'border-radius': '50%',
+                        background: 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'
+                      }} />
+                      <input
+                        type="color"
+                        value={brushColor()}
+                        onChange={(e) => {
+                          const val = e.currentTarget.value
+                          setBrushColor(val)
+                          activateBrush(val, brushSize(), brushOpacity())
+                        }}
+                        onInput={(e) => {
+                          const val = e.currentTarget.value
+                          setBrushColor(val)
+                          // Re-activate brush immediately on every color pick so it stays ready
+                          activateBrush(val, brushSize(), brushOpacity())
+                        }}
+                        style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;color-scheme:dark;"
+                      />
+                    </div>
                   </div>
                 </div>
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <span style="font-size:14px;color:var(--klinecharts-pro-text-color)">Thickness: {brushSize()}</span>
+                  <input type="range" min="1" max="10" value={brushSize()}
+                    onInput={(e) => {
+                      const s = parseInt(e.currentTarget.value)
+                      setBrushSize(s)
+                      // Always update cursor and re-activate brush on every slider move
+                      setChartCursor(makeBrushCursor(brushColor(), s))
+                      activateBrush(brushColor(), s, brushOpacity())
+                    }}
+                    class="klinecharts-pro-brush-slider" />
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <span style="font-size:14px;color:var(--klinecharts-pro-text-color)">Opacity: {brushOpacity()}</span>
+                  <input type="range" min="0.1" max="1" step="0.1" value={brushOpacity()}
+                    onInput={(e) => setBrushOpacity(parseFloat(e.currentTarget.value))}
+                    onChange={(e) => {
+                      // On mouse-up: re-activate brush with new opacity so it's ready to draw
+                      const op = parseFloat(e.currentTarget.value)
+                      setBrushOpacity(op)
+                      activateBrush(brushColor(), brushSize(), op)
+                    }}
+                    class="klinecharts-pro-brush-slider" />
+                </div>
               </div>
-              <div style="display:flex;align-items:center;justify-content:space-between">
-                <span style="font-size:14px;color:var(--klinecharts-pro-text-color)">Thickness: {brushSize()}</span>
-                <input type="range" min="1" max="10" value={brushSize()}
-                  onInput={(e) => {
-                    const s = parseInt(e.currentTarget.value)
-                    setBrushSize(s)
-                    // Always update cursor and re-activate brush on every slider move
-                    setChartCursor(makeBrushCursor(brushColor(), s))
-                    activateBrush(brushColor(), s, brushOpacity())
-                  }}
-                  class="klinecharts-pro-brush-slider" />
-              </div>
-              <div style="display:flex;align-items:center;justify-content:space-between">
-                <span style="font-size:14px;color:var(--klinecharts-pro-text-color)">Opacity: {brushOpacity()}</span>
-                <input type="range" min="0.1" max="1" step="0.1" value={brushOpacity()}
-                  onInput={(e) => setBrushOpacity(parseFloat(e.currentTarget.value))}
-                  onChange={(e) => {
-                    // On mouse-up: re-activate brush with new opacity so it's ready to draw
-                    const op = parseFloat(e.currentTarget.value)
-                    setBrushOpacity(op)
-                    activateBrush(brushColor(), brushSize(), op)
-                  }}
-                  class="klinecharts-pro-brush-slider" />
-              </div>
-            </div>
-          )
-        }
-      </div>
-      <span class="split-line" />
-      <div
-        class="drawing-bar-item"
-        tabIndex={0}
-        onBlur={() => { setPopoverKey('') }}>
-        <span
-          style="width:32px;height:32px"
-          title={mode() === 'normal' ? i18n('weak_magnet', props.locale) : i18n(modeIcon(), props.locale)}
-          onClick={() => {
-            let currentMode = modeIcon()
-            if (mode() !== 'normal') {
-              currentMode = 'normal'
-            }
-            setMode(currentMode)
-            props.onModeChange(currentMode)
-          }}>
-          {
-            modeIcon() === 'weak_magnet'
-              ? (mode() === 'weak_magnet' ? <Icon name="weak_magnet" class="selected icon-overlay" /> : <Icon name="weak_magnet" class="icon-overlay" />)
-              : (mode() === 'strong_magnet' ? <Icon name="strong_magnet" class="selected icon-overlay" /> : <Icon name="strong_magnet" class="icon-overlay" />)
+            )
           }
-        </span>
-        <div
-          class="icon-arrow"
-          onClick={() => {
-            if (popoverKey() === 'mode') {
-              setPopoverKey('')
-            } else {
-              setPopoverKey('mode')
-            }
-          }}>
-          <svg
-            class={popoverKey() === 'mode' ? 'rotate' : ''}
-            viewBox="0 0 4 6">
-            <path d="M1.07298,0.159458C0.827521,-0.0531526,0.429553,-0.0531526,0.184094,0.159458C-0.0613648,0.372068,-0.0613648,0.716778,0.184094,0.929388L2.61275,3.03303L0.260362,5.07061C0.0149035,5.28322,0.0149035,5.62793,0.260362,5.84054C0.505822,6.05315,0.903789,6.05315,1.14925,5.84054L3.81591,3.53075C4.01812,3.3556,4.05374,3.0908,3.92279,2.88406C3.93219,2.73496,3.87113,2.58315,3.73964,2.46925L1.07298,0.159458Z" stroke="none" stroke-opacity="0" />
-          </svg>
         </div>
-        {
-          popoverKey() === 'mode' && (
-            <List class="list">
-              {
-                modes().map(data => (
-                  <li
-                    onClick={() => {
-                      setModeIcon(data.key)
-                      setMode(data.key)
-                      props.onModeChange(data.key)
-                      setPopoverKey('')
-                    }}>
-                    <Icon name={data.key} class="icon-overlay" />
-                    <span style="padding-left:8px">{data.text}</span>
-                  </li>
-                ))
+        <span class="split-line" />
+        <div
+          class="drawing-bar-item"
+          tabIndex={0}
+          onBlur={() => { setPopoverKey('') }}>
+          <span
+            style="width:32px;height:32px"
+            title={mode() === 'normal' ? i18n('weak_magnet', props.locale) : i18n(modeIcon(), props.locale)}
+            onClick={() => {
+              let currentMode = modeIcon()
+              if (mode() !== 'normal') {
+                currentMode = 'normal'
               }
-            </List>
-          )
-        }
-      </div>
-      <div
-        class="drawing-bar-item">
-        <span
-          style="width:32px;height:32px"
-          title={lock() ? i18n('unlock', props.locale) : i18n('lock', props.locale)}
-          onClick={() => {
-            const currentLock = !lock()
-            setLock(currentLock)
-            props.onLockChange(currentLock)
-          }}>
+              setMode(currentMode)
+              props.onModeChange(currentMode)
+            }}>
+            {
+              modeIcon() === 'weak_magnet'
+                ? (mode() === 'weak_magnet' ? <Icon name="weak_magnet" class="selected icon-overlay" /> : <Icon name="weak_magnet" class="icon-overlay" />)
+                : (mode() === 'strong_magnet' ? <Icon name="strong_magnet" class="selected icon-overlay" /> : <Icon name="strong_magnet" class="icon-overlay" />)
+            }
+          </span>
+          <div
+            class="icon-arrow"
+            onClick={() => {
+              if (popoverKey() === 'mode') {
+                setPopoverKey('')
+              } else {
+                setPopoverKey('mode')
+              }
+            }}>
+            <svg
+              class={popoverKey() === 'mode' ? 'rotate' : ''}
+              viewBox="0 0 4 6">
+              <path d="M1.07298,0.159458C0.827521,-0.0531526,0.429553,-0.0531526,0.184094,0.159458C-0.0613648,0.372068,-0.0613648,0.716778,0.184094,0.929388L2.61275,3.03303L0.260362,5.07061C0.0149035,5.28322,0.0149035,5.62793,0.260362,5.84054C0.505822,6.05315,0.903789,6.05315,1.14925,5.84054L3.81591,3.53075C4.01812,3.3556,4.05374,3.0908,3.92279,2.88406C3.93219,2.73496,3.87113,2.58315,3.73964,2.46925L1.07298,0.159458Z" stroke="none" stroke-opacity="0" />
+            </svg>
+          </div>
           {
-            lock() ? <Icon name="lock" class="icon-overlay" /> : <Icon name="unlock" class="icon-overlay" />
+            popoverKey() === 'mode' && (
+              <List class="list">
+                {
+                  modes().map(data => (
+                    <li
+                      onClick={() => {
+                        setModeIcon(data.key)
+                        setMode(data.key)
+                        props.onModeChange(data.key)
+                        setPopoverKey('')
+                      }}>
+                      <Icon name={data.key} class="icon-overlay" />
+                      <span style="padding-left:8px">{data.text}</span>
+                    </li>
+                  ))
+                }
+              </List>
+            )
           }
-        </span>
+        </div>
+        <div
+          class="drawing-bar-item">
+          <span
+            style="width:32px;height:32px"
+            title={lock() ? i18n('unlock', props.locale) : i18n('lock', props.locale)}
+            onClick={() => {
+              const currentLock = !lock()
+              setLock(currentLock)
+              props.onLockChange(currentLock)
+            }}>
+            {
+              lock() ? <Icon name="lock" class="icon-overlay" /> : <Icon name="unlock" class="icon-overlay" />
+            }
+          </span>
+        </div>
+        <div
+          class="drawing-bar-item">
+          <span
+            style="width:32px;height:32px"
+            title={visible() ? i18n('hide_drawings', props.locale) : i18n('show_drawings', props.locale)}
+            onClick={() => {
+              const v = !visible()
+              setVisible(v)
+              props.onVisibleChange(v)
+            }}>
+            {
+              visible() ? <Icon name="visible" class="icon-overlay" /> : <Icon name="invisible" class="icon-overlay" />
+            }
+          </span>
+        </div>
+        <span class="split-line" />
+        <div
+          class="drawing-bar-item">
+          <span
+            style="width:32px;height:32px"
+            title={i18n('remove_drawings', props.locale)}
+            onClick={() => {
+              props.onRemoveClick(GROUP_ID)
+              setChartCursor('')  // reset cursor when drawings are cleared
+            }}>
+            <Icon name="remove" class="icon-overlay" />
+          </span>
+        </div>
       </div>
-      <div
-        class="drawing-bar-item">
-        <span
-          style="width:32px;height:32px"
-          title={visible() ? i18n('hide_drawings', props.locale) : i18n('show_drawings', props.locale)}
+      {/* Scroll-down arrow — shown only when items are clipped */}
+      {showScrollDown() && (
+        <button
+          class="drawing-bar-scroll-btn"
+          title="Scroll down to see more tools"
           onClick={() => {
-            const v = !visible()
-            setVisible(v)
-            props.onVisibleChange(v)
+            scrollRef?.scrollBy({ top: 120, behavior: 'smooth' })
           }}>
-          {
-            visible() ? <Icon name="visible" class="icon-overlay" /> : <Icon name="invisible" class="icon-overlay" />
-          }
-        </span>
-      </div>
-      <span class="split-line" />
-      <div
-        class="drawing-bar-item">
-        <span
-          style="width:32px;height:32px"
-          title={i18n('remove_drawings', props.locale)}
-          onClick={() => {
-            props.onRemoveClick(GROUP_ID)
-            setChartCursor('')  // reset cursor when drawings are cleared
-          }}>
-          <Icon name="remove" class="icon-overlay" />
-        </span>
-      </div>
+          <svg viewBox="0 0 10 6" width="10" height="6">
+            <path d="M0 0L5 6L10 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+      )}
     </div>
   )
 }

@@ -7,6 +7,44 @@
   height: 100%;
   box-sizing: border-box;
   border-right: solid 1px var(--klinecharts-pro-border-color);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+
+  .drawing-bar-scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    // Hide the scrollbar visually while keeping scroll functional
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+  }
+
+  .drawing-bar-scroll-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 24px;
+    flex-shrink: 0;
+    background: var(--klinecharts-pro-background-color);
+    border: none;
+    border-top: 1px solid var(--klinecharts-pro-border-color);
+    cursor: pointer;
+    color: var(--klinecharts-pro-text-second-color);
+    padding: 0;
+    transition: background 0.2s, color 0.2s;
+
+    svg {
+      transition: transform 0.2s;
+    }
+
+    &:hover {
+      background: var(--klinecharts-pro-hover-background-color);
+      color: var(--klinecharts-pro-primary-color);
+      svg { transform: translateY(2px); }
+    }
+  }
 
   .drawing-bar-item {
     display: flex;

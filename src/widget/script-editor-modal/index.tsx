@@ -18,7 +18,6 @@
 import { Component, createSignal, Show } from 'solid-js'
 import { Chart, registerIndicator } from 'klinecharts'
 import TA from '../../utils/TA'
-import SandboxWorker from './sandbox.worker?worker'
 
 // ─── Default template shown on first open ───────────────────────────────────
 const DEFAULT_SCRIPT = `// Custom Indicator - Pine Script Style
@@ -83,108 +82,84 @@ const ScriptEditorModal: Component<ScriptEditorModalProps> = props => {
 
             const liveData = (chart as any).getDataList?.() ?? []
 
-            // Spin up a Web Worker sandbox to execute code
-            const worker = new SandboxWorker()
-            const scriptId = Date.now().toString()
+            // Execute script inline using new Function() with sandboxed globals
+            // (same technique used in ChartLayoutManager.restoreState)
+            const shadowKeys = [
+                'fetch', 'XMLHttpRequest', 'WebSocket', 'Worker',
+                'SharedWorker', 'importScripts', 'self', 'caches', 'indexedDB'
+            ]
+            const fn = new Function(
+                ...shadowKeys,
+                'TA', 'dataList', 'params',
+                `"use strict";\n${code()}`
+            )
+            const shadowValues = shadowKeys.map(() => undefined)
+            const sampleResult = fn(...shadowValues, TA, liveData, parsedParams)
 
-            worker.onmessage = (e) => {
-                const { success, result, error, scriptId: resId } = e.data
-                if (resId !== scriptId) return
-
-                worker.terminate()
-
-                if (!success) {
-                    setError('Sandbox Error: ' + error)
-                    setRunning(false)
-                    return
-                }
-
-                try {
-                    const sampleResult = result
-                    if (!Array.isArray(sampleResult)) {
-                        throw new Error('Script must return an Array.')
-                    }
-
-                    const seriesKeys: string[] = sampleResult.length > 0
-                        ? Object.keys(sampleResult.find(v => v !== null) ?? {})
-                        : ['value']
-
-                    if (seriesKeys.length === 0) throw new Error('Returned objects have no keys.')
-
-                    // ── Build indicator descriptor ───────────────────────────────────
-                    scriptCounter++
-                    const indicatorName = `_custom_script_${scriptCounter}`
-
-                    const figures = seriesKeys.map((key, i) => {
-                        const color = SERIES_COLORS[i % SERIES_COLORS.length]
-                        return {
-                            key,
-                            title: `${key}: `,
-                            type: 'line',
-                            styles: () => ({ color })
-                        }
-                    })
-
-                    registerIndicator({
-                        name: indicatorName,
-                        shortName: (scriptName().trim() || `Script #${scriptCounter}`) + (placement() === 'main' ? ' (Main)' : ' (Sub)'),
-                        calcParams: parsedParams,
-                        figures: figures as any,
-                        // Provide pre-calculated result directly since klinecharts calc is synchronous.
-                        calc: () => sampleResult,
-                        // We store the script details in extendData so ChartStateManager can serialize them.
-                        extendData: {
-                            isCustomScript: true,
-                            code: code(),
-                            placement: placement()
-                        }
-                    })
-
-                    // Remove previous custom indicator pane or main overlay if it exists
-                    const prevId = activeId()
-                    const prevName = activeIndicatorName()
-                    if (prevName && chart) {
-                        try {
-                            chart.removeIndicator(prevId === 'candle_pane' ? 'candle_pane' : prevId!, prevName)
-                        } catch { }
-                    }
-
-                    // Add to chart
-                    let paneId: string | null = null
-                    if (placement() === 'main') {
-                        paneId = chart.createIndicator({ name: indicatorName }, true, { id: 'candle_pane' })
-                    } else {
-                        paneId = chart.createIndicator({ name: indicatorName }, true, undefined)
-                    }
-
-                    setActiveId(typeof paneId === 'string' ? paneId : null)
-                    setActiveIndicatorName(indicatorName)
-                    const title = scriptName().trim() || `Script #${scriptCounter}`
-                    setStatus(`✓ ${title} applied to ${placement() === 'main' ? 'Main Chart' : 'Sub Pane'} — ${seriesKeys.length} series: ${seriesKeys.join(', ')}`)
-
-                } catch (err: any) {
-                    setError(err?.message ?? String(err))
-                } finally {
-                    setRunning(false)
-                }
+            if (!Array.isArray(sampleResult)) {
+                throw new Error('Script must return an Array.')
             }
 
-            worker.onerror = (err: any) => {
-                worker.terminate()
-                setError('Worker Error: ' + err.message)
-                setRunning(false)
-            }
+            const seriesKeys: string[] = sampleResult.length > 0
+                ? Object.keys(sampleResult.find(v => v !== null) ?? {})
+                : ['value']
 
-            // Post message to the sandbox
-            worker.postMessage({
-                code: code(),
-                dataList: liveData,
-                params: parsedParams,
-                scriptId
+            if (seriesKeys.length === 0) throw new Error('Returned objects have no keys.')
+
+            // ── Build indicator descriptor ───────────────────────────────────
+            scriptCounter++
+            const indicatorName = `_custom_script_${scriptCounter}`
+
+            const figures = seriesKeys.map((key, i) => {
+                const color = SERIES_COLORS[i % SERIES_COLORS.length]
+                return {
+                    key,
+                    title: `${key}: `,
+                    type: 'line',
+                    styles: () => ({ color })
+                }
             })
+
+            registerIndicator({
+                name: indicatorName,
+                shortName: (scriptName().trim() || `Script #${scriptCounter}`) + (placement() === 'main' ? ' (Main)' : ' (Sub)'),
+                calcParams: parsedParams,
+                figures: figures as any,
+                // Provide pre-calculated result directly since klinecharts calc is synchronous.
+                calc: () => sampleResult,
+                // We store the script details in extendData so ChartStateManager can serialize them.
+                extendData: {
+                    isCustomScript: true,
+                    code: code(),
+                    placement: placement()
+                }
+            })
+
+            // Remove previous custom indicator pane or main overlay if it exists
+            const prevId = activeId()
+            const prevName = activeIndicatorName()
+            if (prevName && chart) {
+                try {
+                    chart.removeIndicator(prevId === 'candle_pane' ? 'candle_pane' : prevId!, prevName)
+                } catch { }
+            }
+
+            // Add to chart
+            let paneId: string | null = null
+            if (placement() === 'main') {
+                paneId = chart.createIndicator({ name: indicatorName }, true, { id: 'candle_pane' })
+            } else {
+                paneId = chart.createIndicator({ name: indicatorName }, true, undefined)
+            }
+
+            setActiveId(typeof paneId === 'string' ? paneId : null)
+            setActiveIndicatorName(indicatorName)
+            const title = scriptName().trim() || `Script #${scriptCounter}`
+            setStatus(`✓ ${title} applied to ${placement() === 'main' ? 'Main Chart' : 'Sub Pane'} — ${seriesKeys.length} series: ${seriesKeys.join(', ')}`)
 
         } catch (e: any) {
             setError(e?.message ?? String(e))
+        } finally {
             setRunning(false)
         }
     }

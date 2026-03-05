@@ -95,7 +95,7 @@ A built-in **Pine Script–style JavaScript editor** for creating fully custom i
 
 1. Open via the **`Script`** button in the top toolbar.
 2. Write a JS function body in the textarea — the code runs on every candle array.
-3. Click **▶ Run** (or press `Ctrl+Enter`) — the script executes in an isolated Web Worker sandbox and the result appears on the chart immediately.
+3. Click **▶ Run** (or press `Ctrl+Enter`) — the script executes in an isolated sandboxed function and the result appears on the chart immediately.
 4. Adjust parameters and re-run — only the result pane updates, your code stays intact.
 
 #### Script contract
@@ -170,7 +170,7 @@ return closes.map((_, i) => ({
 
 #### Sandbox security
 
-Scripts run inside a **Web Worker** with the following globals deliberately shadowed to `undefined`:  
+Scripts run inside an **isolated `new Function()` scope** with the following globals deliberately shadowed to `undefined`:  
 `fetch` · `XMLHttpRequest` · `WebSocket` · `Worker` · `SharedWorker` · `importScripts` · `self` · `caches` · `indexedDB`
 
 This prevents the script from making network requests, spawning sub-workers, or accessing storage — safe to run arbitrary user code.
