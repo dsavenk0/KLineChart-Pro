@@ -385,6 +385,8 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         }
       }
     })
+    // @ts-expect-error
+    window.chartWidget = widget
     console.log('KLineChart init result:', widget)
 
     if (widget) {

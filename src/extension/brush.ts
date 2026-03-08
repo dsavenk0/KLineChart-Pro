@@ -1,6 +1,8 @@
-import { OverlayTemplate, registerFigure, Coordinate, Axis } from 'klinecharts'
+import { OverlayTemplate, registerFigure, Coordinate, Point } from 'klinecharts'
 
-// Optimized RDP using squared distances for better performance
+/**
+ * Optimized Euclidean distance utility.
+ */
 function getSqSegDist(p: Coordinate, p1: Coordinate, p2: Coordinate) {
     let x = p1.x
     let y = p1.y
@@ -23,13 +25,19 @@ function getSqSegDist(p: Coordinate, p1: Coordinate, p2: Coordinate) {
     return dx * dx + dy * dy
 }
 
-// Iterative RDP to avoid stack overflow on very long paths
-function rdp(points: Coordinate[], epsilon: number) {
+/**
+ * Douglas-Peucker simplification mask generator.
+ * Uses a mask to preserve high-precision data points while reducing rendering overhead.
+ */
+function rdpMask(points: Coordinate[], epsilon: number): Uint8Array {
     const len = points.length
-    if (len <= 2) return points
+    const markers = new Uint8Array(len)
+    if (len <= 2) {
+        markers.fill(1)
+        return markers
+    }
 
     const sqEpsilon = epsilon * epsilon
-    const markers = new Uint8Array(len)
     markers[0] = markers[len - 1] = 1
 
     const stack = [[0, len - 1]]
@@ -52,12 +60,7 @@ function rdp(points: Coordinate[], epsilon: number) {
             stack.push([index, last])
         }
     }
-
-    const result: Coordinate[] = []
-    for (let i = 0; i < len; i++) {
-        if (markers[i]) result.push(points[i])
-    }
-    return result
+    return markers
 }
 
 // Register a custom figure for the smooth brush path
@@ -68,10 +71,8 @@ registerFigure({
         if (coordinates.length < 2) return
 
         ctx.save()
-        // KLineChart handles canvas scaling, but we ensure the line rendering remains crisp.
-        // Reset line dash to prevent bleeding from other figures.
         ctx.setLineDash([])
-        ctx.strokeStyle = styles.color || '#f00'
+        ctx.strokeStyle = styles.color || '#1677ff'
         ctx.lineWidth = styles.size || 2
         ctx.lineCap = 'round'
         ctx.lineJoin = 'round'
@@ -82,7 +83,7 @@ registerFigure({
         if (coordinates.length === 2) {
             ctx.lineTo(coordinates[1].x, coordinates[1].y)
         } else {
-            // Quadratic Bezier smoothing with midpoints for better visual quality
+            // Quadratic Bezier smoothing for premium look
             for (let i = 1; i < coordinates.length - 2; i++) {
                 const xc = (coordinates[i].x + coordinates[i + 1].x) / 2
                 const yc = (coordinates[i].y + coordinates[i + 1].y) / 2
@@ -121,12 +122,9 @@ interface BrushDataPoint {
 }
 
 interface BrushData {
-    // Raw pixel buffer collected during drawing — drained in createPointFigures
-    pixels: Array<{ x: number; y: number }>
-    // Persistent data-space points (zoom/pan safe)
+    // Persistent stable points (timestamp/price anchor)
     points: BrushDataPoint[]
     isDirty: boolean
-    paneId?: string
 }
 
 const brush: OverlayTemplate = {
@@ -137,98 +135,91 @@ const brush: OverlayTemplate = {
     needDefaultYAxisFigure: false,
 
     // ─── State: Drawing ─────────────────────────────────────────────────────────
-    // NOTE: xAxis/yAxis are NOT available inside onDrawing (OverlayEvent type).
-    // So we buffer raw pixel coords here and convert them to {timestamp, value}
-    // immediately in createPointFigures, which does have axis access.
     onDrawing: (params) => {
         const { overlay, x, y } = params
-        const paneId = (params as any).paneId
-        if (x === undefined || y === undefined) return true
-        if (overlay.currentStep !== 2) return true
+        if (x === undefined || y === undefined || overlay.currentStep !== 2) return true
+
+        const chart = (window as any).chartWidget
+        if (!chart) return true
 
         if (!overlay.extendData) {
-            overlay.extendData = {
-                pixels: [],
-                points: [],
-                isDirty: false,
-                paneId
-            } as BrushData
+            overlay.extendData = { points: [], isDirty: false } as BrushData
         }
 
         const data = overlay.extendData as BrushData
-        if (data.paneId && data.paneId !== paneId) {
-            return true
-        }
+        const lastDataPoint = data.points[data.points.length - 1]
 
-        const lastPixel = data.pixels[data.pixels.length - 1]
-
-        // 2px threshold to suppress jitter while keeping fidelity
-        if (lastPixel) {
-            const dx = x - lastPixel.x
-            const dy = y - lastPixel.y
+        // Jitter suppression (distance check in pixel space)
+        if (lastDataPoint) {
+            const lastPx = chart.convertToPixel({ timestamp: lastDataPoint.timestamp, value: lastDataPoint.value }, { paneId: overlay.paneId }) as Coordinate
+            const dx = x - lastPx.x
+            const dy = y - lastPx.y
             if (dx * dx + dy * dy < 4) return true
         }
 
-        data.pixels.push({ x, y })
+        // Capture STABLE Point data (contains Unix timestamp)
+        const point = chart.convertFromPixel({ x, y }, { paneId: overlay.paneId }) as Point
+        if (point.timestamp !== undefined) {
+            data.points.push({
+                timestamp: point.timestamp,
+                value: point.value!
+            })
+        }
         return true
     },
 
-    // ─── State: Finished ────────────────────────────────────────────────────────
-    // Mark as dirty so RDP simplification runs once on the next render pass.
     onDrawEnd: (params) => {
         const { overlay } = params
         const data = overlay.extendData as BrushData | undefined
-        if (data) {
-            data.isDirty = true
-        }
+        if (data) data.isDirty = true
         return true
     },
 
     // ─── Render ─────────────────────────────────────────────────────────────────
-    // Convert data-space points back to pixels for rendering.
-    // On the first render after drawing ends, run RDP to simplify the path.
     createPointFigures: ({ overlay, xAxis, yAxis, defaultStyles }) => {
         const data = overlay.extendData as BrushData | undefined
         if (!data || !xAxis || !yAxis) return []
 
-        // ── Drain pixel buffer → data-space (happens every render during drawing) ──
-        if (data.pixels.length > 0) {
-            for (const p of data.pixels) {
-                data.points.push({
-                    timestamp: xAxis.convertFromPixel(p.x),
-                    value: yAxis.convertFromPixel(p.y)
-                })
-            }
-            data.pixels = []
-        }
-
         let { points } = data
 
-        // ── Post-drawing RDP simplification (runs once after draw ends) ──
+        const chart = (window as any).chartWidget
+        if (!chart) return []
+
+        // --- 1. Post-drawing Simplification (runs once) ---
         if (data.isDirty && points.length > 2) {
-            // Convert to pixel space for metric-consistent simplification
-            const pixelPoints = points.map(p => ({
-                x: xAxis.convertToPixel(p.timestamp),
-                y: yAxis.convertToPixel(p.value)
-            }))
+            const pixelPoints: Coordinate[] = points.map(p => {
+                const px = chart.convertToPixel({ timestamp: p.timestamp, value: p.value }, { paneId: overlay.paneId })
+                return { x: px.x!, y: px.y! }
+            })
 
-            const simplified = rdp(pixelPoints, 1.5)
-
-            data.points = simplified.map(p => ({
-                timestamp: xAxis.convertFromPixel(p.x),
-                value: yAxis.convertFromPixel(p.y)
-            }))
+            const markers = rdpMask(pixelPoints, 1.0)
+            const simplified: BrushDataPoint[] = []
+            for (let i = 0; i < points.length; i++) {
+                if (markers[i]) simplified.push(points[i])
+            }
+            data.points = simplified
             points = data.points
             data.isDirty = false
         }
 
         if (points.length < 2) return []
 
-        // Map data-space back to pixel coordinates for the current viewport
-        const coordinates = points.map(p => ({
-            x: xAxis.convertToPixel(p.timestamp),
-            y: yAxis.convertToPixel(p.value)
-        }))
+        // --- 2. Render: Map stable data-space back to current screen pixels ---
+        const coordinates: Coordinate[] = []
+        for (const p of points) {
+            // HIGH PRECISION MAPPING: SMC MODE
+            // Using the global chart converter ensures that even fractional 
+            // timestamps (between candles) are mapped with perfect zoom scaling.
+            const px = chart.convertToPixel({ timestamp: p.timestamp, value: p.value }, { paneId: overlay.paneId }) as Coordinate
+            if (px.x !== undefined && px.y !== undefined) {
+                coordinates.push({
+                    x: Math.round(px.x),
+                    y: Math.round(px.y)
+                })
+            }
+        }
+
+        if (coordinates.length < 2) return []
 
         return [
             {
